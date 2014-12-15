@@ -17,7 +17,13 @@ import java.awt.geom.QuadCurve2D;
 import java.util.ArrayList;
 import java.util.Stack;
 
-import javax.swing.*;
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
+import javax.swing.Timer;
+
 
 /**
  *
