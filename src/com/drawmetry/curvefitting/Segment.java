@@ -16,7 +16,7 @@ class Segment {
 
     Segment(int degree, double[] coords) {
         this.degree = degree;
-        this.coords = coords.clone();
+        this.coords = coords;
     }
 
     void paintSelf(Graphics2D g2) {

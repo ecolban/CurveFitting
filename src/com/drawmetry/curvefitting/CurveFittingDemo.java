@@ -329,7 +329,7 @@ public class CurveFittingDemo extends JPanel implements Runnable, ActionListener
                 state = State.AFTER_BEZIER_FIT;
                 break;
             case AFTER_BEZIER_FIT: // state after Bezier fit
-                if (residualCurrent == 0.0 || 0.9 < residualCurrent / residualPrevious) {
+                if (residualCurrent < 0.5 || 0.9 < residualCurrent / residualPrevious) {
                     mid = end - start == 1 ? end : splitPoints(start, end);
                     currentPainter = showSplitCurve;
                     label.setText(String.format("Finding the most distant point / Distance = %.2f",

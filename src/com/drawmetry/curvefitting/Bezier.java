@@ -205,37 +205,16 @@ public class Bezier
         	return;
         }
 
-        double[][] a12 = new double[a.length][2];
-        double[][] a03 = new double[a.length][2];
-        for (int i = 0; i < a.length; i++) {
-            a12[i][0] = a[i][1];
-            a12[i][1] = a[i][2];
-            a03[i][0] = a[i][0];
-            a03[i][1] = a[i][3];
-        }
-
-        Matrix matrixWxTxB12 = new Matrix(a12);
-
         a = new double[numPoints][2];
         for (int i = 0; i < numPoints; i++) {
             double w_i = weight(numPoints, i);
             Point2D.Double d_i = samplePoints[start + i];
-            a[i][0] = w_i * d_i.x - a03[i][0] * samplePoints[start].x - a03[i][1] * samplePoints[end].x;
-            a[i][1] = w_i * d_i.y - a03[i][0] * samplePoints[start].y - a03[i][1] * samplePoints[end].y;
+            a[i][0] = w_i * d_i.x;
+            a[i][1] = w_i * d_i.y;
         }
         matrixWxD = new Matrix(a);
-        matrixP = matrixWxTxB12.solve(matrixWxD); //Finds matrixP that yields minimal residual
-        controlPoints = new double[4][2];
-        controlPoints[0][0] = samplePoints[start].x;
-        controlPoints[0][1] = samplePoints[start].y;
-        controlPoints[1][0] = matrixP.get(0, 0);
-        controlPoints[1][1] = matrixP.get(0, 1);
-        controlPoints[2][0] = matrixP.get(1, 0);
-        controlPoints[2][1] = matrixP.get(1, 1);
-        controlPoints[3][0] = samplePoints[end].x;
-        controlPoints[3][1] = samplePoints[end].y;
-
-//        controlPoints = matrixP.getArray();
+        matrixP = matrixWxTxB.solve(matrixWxD); //Finds matrixP that yields minimal residual
+        controlPoints = matrixP.getArray();
 
         // recompute the getPosition array
         for (int i = 0; i < 2; i++) {
