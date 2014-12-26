@@ -24,7 +24,7 @@ import javax.swing.Timer;
 public class CurveFittingGUI extends JPanel implements Runnable, ActionListener {
 
 	private JLabel label = new JLabel();
-	private PathFinder currentPathFinder;
+	private PausablePathFinder currentPathFinder;
 
 	private Timer ticker;
 
@@ -127,7 +127,7 @@ public class CurveFittingGUI extends JPanel implements Runnable, ActionListener 
 			} catch (InterruptedException e1) {
 			}
 		}
-		currentPathFinder = new PathFinder(sp);
+		currentPathFinder = new PausablePathFinder(sp);
 		currentPathFinder.attach(); // launch the currentPathFinder, wait for it
 									// to proceed to the next state, ...
 		label.setText(currentPathFinder.getMessage()); // ... and then update
