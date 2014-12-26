@@ -24,7 +24,7 @@ import javax.swing.Timer;
 public class CurveFittingGUI extends JPanel implements Runnable, ActionListener {
 
 	private JLabel label = new JLabel();
-	private PathFinder currentPathGenerator;
+	private PathFinder currentPathFinder;
 
 	private Timer ticker;
 
@@ -90,7 +90,7 @@ public class CurveFittingGUI extends JPanel implements Runnable, ActionListener 
 		button.addActionListener(new ActionListener() {
 
 			public void actionPerformed(ActionEvent e) {
-				if (currentPathGenerator == null) {
+				if (currentPathFinder == null) {
 
 				} else if (ticker.isRunning()) {
 					ticker.stop();
@@ -104,8 +104,7 @@ public class CurveFittingGUI extends JPanel implements Runnable, ActionListener 
 		button.addActionListener(new ActionListener() {
 
 			public void actionPerformed(ActionEvent e) {
-				if (currentPathGenerator == null) {
-
+				if (currentPathFinder == null) {
 				} else if (ticker.isRunning()) {
 					ticker.stop();
 				} else {
@@ -118,18 +117,21 @@ public class CurveFittingGUI extends JPanel implements Runnable, ActionListener 
 	}
 
 	private void setPathGenerator(Point2D.Double[] sp) {
-		if (currentPathGenerator != null && !currentPathGenerator.isCancelled()) {
+		if (currentPathFinder != null && !currentPathFinder.isCancelled()) {
 			try {
 				if (ticker.isRunning()) {
 					ticker.stop();
 				}
-				currentPathGenerator.cancel();
+				currentPathFinder.cancel(); // tell the currentPathFinder to
+											// shut down and wait for it to die.
 			} catch (InterruptedException e1) {
 			}
 		}
-		currentPathGenerator = new PathFinder(sp);
-		currentPathGenerator.attach();
-		;
+		currentPathFinder = new PathFinder(sp);
+		currentPathFinder.attach(); // launch the currentPathFinder, wait for it
+									// to proceed to the next state, ...
+		label.setText(currentPathFinder.getMessage()); // ... and then update
+														// the GUI
 		repaint();
 	}
 
@@ -175,29 +177,28 @@ public class CurveFittingGUI extends JPanel implements Runnable, ActionListener 
 		for (int i = 0; i < num; i++) {
 			double delta = 350.0 / (num - 1);
 			sp[i] = new Point2D.Double(
-					20 + 2 * i * delta, 50 + Math.abs(60 - i * delta));
-
+					20 + 2 * i * delta, 100 + Math.abs(60 - i * delta));
 		}
 		return sp;
 	}
 
 	@Override
 	public void paintComponent(Graphics g) {
-		int w = getWidth();
-		int h = getHeight();
 		Graphics2D g2 = (Graphics2D) g;
 		g2.setColor(Color.WHITE);
-		g2.fillRect(0, 0, w, h);
-		if (currentPathGenerator != null) {
-			currentPathGenerator.paintSelf(g2);
+		g2.fillRect(0, 0, getWidth(), getHeight());
+		if (currentPathFinder != null) {
+			currentPathFinder.paintSelf(g2);
 		}
 	}
 
 	@Override
 	public void actionPerformed(ActionEvent e) {
 		try {
-			currentPathGenerator.reattach();
-			label.setText(currentPathGenerator.getMessage());
+			currentPathFinder.reattach(); // wait for the currentPathFinder to
+											// proceed to next state ...
+			label.setText(currentPathFinder.getMessage()); // ... and then
+															// update the GUI
 			repaint();
 		} catch (InterruptedException e1) {
 		}

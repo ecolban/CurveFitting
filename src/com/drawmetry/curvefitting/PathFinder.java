@@ -70,13 +70,10 @@ public class PathFinder extends Coroutine {
 	private double[] initialT;
 	private int start, end;
 	private double[] t;
-	private int farthestPoint;
+	private int farthestPointIdx;
 	private double[][] controlPoints = new double[4][2];
 	private double[][] position = new double[4][2];
 	private double[][] velocity = new double[3][2];
-	private Matrix matrixWxDminusWxTxB03xP03t;
-	private Matrix matrixWxTxB12;
-	private Matrix matrixX;
 	private double fitToleranceSq = FIT_TOLERANCE * FIT_TOLERANCE;
 	private Path2D path;
 
@@ -119,9 +116,9 @@ public class PathFinder extends Coroutine {
 		}
 		if (currentState == State.SPLIT_DETERMINATION) {
 			g2.setColor(Color.RED);
-			Point2D pos = position(t[farthestPoint - start]);
-			g2.drawLine((int) samplePoints[farthestPoint].getX(),
-					(int) samplePoints[farthestPoint].getY(),
+			Point2D pos = position(t[farthestPointIdx - start]);
+			g2.drawLine((int) samplePoints[farthestPointIdx].getX(),
+					(int) samplePoints[farthestPointIdx].getY(),
 					(int) pos.getX(), (int) pos.getY());
 		}
 		if (path != null) {
@@ -155,12 +152,16 @@ public class PathFinder extends Coroutine {
 	}
 
 	public String getMessage() {
-		if (currentState == State.SPLIT_DETERMINATION) {
-			Point2D pos = position(t[farthestPoint - start]);
+		switch (currentState) {
+		case AFTER_INITIAL_PARAM:
+			return "Initial";
+		case SPLIT_DETERMINATION:
+			Point2D pos = position(t[farthestPointIdx - start]);
 			return String.format("Greatest distance = %.2f",
-					samplePoints[farthestPoint].distance(pos));
+					samplePoints[farthestPointIdx].distance(pos));
+		default:
+			return String.format("Residual = %.2f", calculateResidual());
 		}
-		return String.format("Residual = %.2f", calculateResidual());
 	}
 
 	@Override
@@ -175,7 +176,8 @@ public class PathFinder extends Coroutine {
 	/**
 	 * Generates a Path2D from an array of sample points
 	 *
-	 * @throws InterruptedException, CancelledException
+	 * @throws InterruptedException
+	 *             , CancelledException
 	 * 
 	 */
 	private void getPath() throws InterruptedException, CancelledException {
@@ -189,7 +191,7 @@ public class PathFinder extends Coroutine {
 		path = new Path2D.Double();
 		path.moveTo(samplePoints[0].getX(), samplePoints[0].getY());
 		initialParametrization();
-		fitCurve(0, n - 1);
+		fitBezierSeq(0, n - 1);
 	}
 
 	private void initialParametrization() {
@@ -215,12 +217,13 @@ public class PathFinder extends Coroutine {
 		}
 	}
 
-
-	private void fitCurve(final int start, final int end) throws InterruptedException,
+	private void fitBezierSeq(final int start, final int end) throws InterruptedException,
 			CancelledException {
 		assert end > start;
 		this.start = start;
 		this.end = end;
+		initialParametrization();
+		pause(State.AFTER_INITIAL_PARAM);
 		int n = end - start + 1;
 		if (n == 2) {
 			// number of points == 2.
@@ -229,24 +232,36 @@ public class PathFinder extends Coroutine {
 			return;
 		}
 		// Adjust the initial parametrization to the current segment
-		initialParametrization();
-
 		if (n == 3) {
 			// number of points == 3.
 			// Fit 3 points with a quad curve.
 			fitQuad(start, end);
+			path.quadTo(
+					controlPoints[1][0],
+					controlPoints[1][1],
+					controlPoints[2][0],
+					controlPoints[2][1]);
 			return;
 		}
 		// number of points >= 4
 		// Fit 4 or more points with a cubic curve.
-		pause(State.AFTER_INITIAL_PARAM);
-		double maxDistSq = fitSingle();
+		fitCubic();
+		// Find the point farthest from the curve.
+		farthestPointIdx = start;
+		double maxDistSq = 0.0;
+		for (int i = start + 1; i < end; i++) {
+			double distSq = samplePoints[i].distanceSq(position(t[i - start]));
+			if (distSq > maxDistSq) {
+				maxDistSq = distSq;
+				farthestPointIdx = i;
+			}
+		}
 		pause(State.SPLIT_DETERMINATION);
 
 		if (maxDistSq > fitToleranceSq) {
-			int split = farthestPoint;
-			fitCurve(start, split);
-			fitCurve(split, end);
+			int splitIdx = farthestPointIdx;
+			fitBezierSeq(start, splitIdx);
+			fitBezierSeq(splitIdx, end);
 		} else {
 			path.curveTo(
 					controlPoints[1][0],
@@ -256,41 +271,6 @@ public class PathFinder extends Coroutine {
 					controlPoints[3][0],
 					controlPoints[3][1]);
 		}
-
-	}
-
-	private double fitSingle() throws InterruptedException, CancelledException {
-		boolean doneFitting = false;
-		double previousResidual; // = Double.MAX_VALUE;
-		double residual = Double.MAX_VALUE;
-		while (!doneFitting) {
-			matrixWxDminusWxTxB03xP03t = new Matrix(getMatrixWxDminusWxTxB03xP03t(t, start, end));
-			matrixWxTxB12 = new Matrix(getWxTxB12(t));
-			findControlPoints(start, end);
-			pause(State.AFTER_LSF);
-			previousResidual = residual;
-			residual = reparametrize();
-			if (residual < 0.95 * previousResidual && residual > 0.25) {
-				pause(State.AFTER_REPARAM);
-			} else {
-				doneFitting = true;
-			}
-		}
-
-		// Find the point farthest from the curve. If this point is farther than
-		// fitToleranceSq from the curve, split the points into two subsets and
-		// fit each
-		// subset
-		farthestPoint = start;
-		double maxDistSq = 0.0;
-		for (int i = start + 1; i < end; i++) {
-			double distSq = samplePoints[i].distanceSq(position(t[i - start]));
-			if (distSq > maxDistSq) {
-				maxDistSq = distSq;
-				farthestPoint = i;
-			}
-		}
-		return maxDistSq;
 	}
 
 	/**
@@ -300,39 +280,41 @@ public class PathFinder extends Coroutine {
 	 * @param end
 	 */
 	private void fitQuad(final int start, final int end) {
-		double x0 = samplePoints[start].getX();
-		double y0 = samplePoints[start].getY();
-		double x2 = samplePoints[end].getX();
-		double y2 = samplePoints[end].getY();
-		double x1 = samplePoints[start + 1].getX() / (1 - t[1]) / t[1] - (1 - t[1]) / t[1] * x0
-				- t[1] / (1 - t[1]) * x2;
-		x1 /= 2.0;
-		double y1 = samplePoints[start + 1].getY() / (1 - t[1]) / t[1] - (1 - t[1]) / t[1] * y0
-				- t[1] / (1 - t[1]) * y2;
-		y1 /= 2.0;
-		path.quadTo(x1, y1, x2, y2);
+		controlPoints[0][0] = samplePoints[start].getX();
+		controlPoints[0][1] = samplePoints[start].getY();
+		controlPoints[2][0] = samplePoints[end].getX();
+		controlPoints[2][1] = samplePoints[end].getY();
+		controlPoints[1][0] = (
+				samplePoints[start + 1].getX() / (1 - t[1]) / t[1]
+						- (1 - t[1]) / t[1] * controlPoints[0][0]
+						- t[1] / (1 - t[1]) * controlPoints[2][0]) / 2.0;
+		controlPoints[1][1] = (
+				samplePoints[start + 1].getY() / (1 - t[1]) / t[1]
+						- (1 - t[1]) / t[1] * controlPoints[0][1]
+						- t[1] / (1 - t[1]) * controlPoints[2][1]) / 2.0;
 	}
 
-	/**
-	 * Blocks until de-blocked by an EDT event
-	 * 
-	 * @param state
-	 *            the state of the execution when this method is called
-	 * @throws InterruptedException
-	 * @throws CancelledException
-	 *             if the EDT cancels the execution
-	 */
-	private void pause(State state) throws InterruptedException, CancelledException {
-		currentState = state;
-		detach();
-		if (isCancelled()) {
-			throw new CancelledException();
+	private void fitCubic() throws InterruptedException, CancelledException {
+		boolean doneFitting = false;
+		double previousResidual; // = Double.MAX_VALUE;
+		double residual = Double.MAX_VALUE;
+		while (!doneFitting) {
+			leastSquareFit(start, end);
+			pause(State.AFTER_LSF);
+			previousResidual = residual;
+			residual = reparametrize();
+			if (residual < 0.95 * previousResidual && residual > 0.25) {
+				pause(State.AFTER_REPARAM);
+			} else {
+				doneFitting = true;
+			}
 		}
 	}
 
-	private void findControlPoints(int start, int end) {
-
-		matrixX = matrixWxTxB12.solve(matrixWxDminusWxTxB03xP03t);
+	private void leastSquareFit(int start, int end) {
+		Matrix matrixA = getWxTxB12();
+		Matrix matrixB = getMatrixWxDminusWxTxB03xP03t();
+		Matrix matrixX = matrixA.solve(matrixB);
 		double[][] controlPoints12 = matrixX.getArray();
 		controlPoints[0][0] = samplePoints[start].getX();
 		controlPoints[0][1] = samplePoints[start].getY();
@@ -429,7 +411,7 @@ public class PathFinder extends Coroutine {
 		return new Point2D.Double(x, y);
 	}
 
-	private double[][] getWxTxB12(double[] t) {
+	private Matrix getWxTxB12() {
 		double[][] a = new double[t.length][2];
 		int n = t.length - 1;
 		for (int i = 0; i <= n; i++) {
@@ -443,10 +425,10 @@ public class PathFinder extends Coroutine {
 				a[i][j] *= wi;
 			}
 		}
-		return a;
+		return new Matrix(a);
 	}
 
-	private double[][] getMatrixWxDminusWxTxB03xP03t(double[] t, int start, int end) {
+	private Matrix getMatrixWxDminusWxTxB03xP03t() {
 		int n = end - start;
 		double[][] b03xP03 = new double[4][2];
 		double a[][] = new double[n + 1][2];
@@ -469,11 +451,28 @@ public class PathFinder extends Coroutine {
 			a[i][0] = wi * (samplePoints[start + i].getX() - txb03P03X);
 			a[i][1] = wi * (samplePoints[start + i].getY() - txb03P03Y);
 		}
-		return a;
+		return new Matrix(a);
 	}
 
 	private double weight(int n, final int i) {
 		return Math.abs(n - 2.0 * i);
 		// return 1.0;
+	}
+
+	/**
+	 * Blocks until de-blocked by an EDT event
+	 * 
+	 * @param state
+	 *            the state of the execution when this method is called
+	 * @throws InterruptedException
+	 * @throws CancelledException
+	 *             if the EDT cancels the execution
+	 */
+	private void pause(State state) throws InterruptedException, CancelledException {
+		currentState = state;
+		detach();
+		if (isCancelled()) {
+			throw new CancelledException();
+		}
 	}
 }
